@@ -1,6 +1,4 @@
 import pygame, random, time
-import os
-import neat
 
 pygame.init()
 
@@ -12,11 +10,11 @@ screen = pygame.display.set_mode((WIDTH,HEIGHT))
 pygame.display.set_caption("Flappy Bird")
 
 class Bird(object):
-	upthrust = 13.5
-	gravity = 2.5
+	upthrust = 12.5
+	gravity = 1.5
 	angle = 20
 	anglerate = 5
-	img = pygame.image.load('main/bird.png')
+	img = pygame.image.load('bird.png')
 	img = pygame.transform.scale(img, (img.get_width()//4,img.get_height()//4))
 	def __init__(self, x, y):
 		self.x = x
@@ -55,11 +53,11 @@ class Bird(object):
 class Pillar(object):
 	gap = 200
 	w = 100
-	img = pygame.image.load('main/pipe.png')
+	img = pygame.image.load('pipe.png')
 	img = pygame.transform.scale(img, (100, 500))
 	def __init__(self, x):
 		self.x = x
-		self.height = random.randint(100,450)
+		self.height = random.randint(50,450)
 		self.top = pygame.transform.flip(self.img, False, True)
 		self.bottom = self.img
 		self.y1 = self.height - self.img.get_height()
@@ -81,8 +79,8 @@ class Pillar(object):
 		return False
 
 class Background:	
-	bg = pygame.image.load('main/bg.png')
-	ground = pygame.image.load('main/ground.png')
+	bg = pygame.image.load('bg.png')
+	ground = pygame.image.load('ground.png')
 	bg = pygame.transform.scale(bg, (600, 700))
 	ground = pygame.transform.scale(ground, (WIDTH+10,100))
 	ground_height = 100
@@ -110,102 +108,60 @@ class Background:
 	def collide(self, bird):
 		return bird.y+bird.h>=HEIGHT-self.ground_height
   
-def draw(birds, pillars, score, background):
+def draw(bird, pillars, score, background):
 	background.draw_bg()
 	for i in pillars:
 		i.draw()
 	background.draw_ground()
-	for bird in birds:
-	    bird.draw()
+	bird.draw()
+	#pygame.draw.line(screen, (255, 0, 0), (bird.x, bird.y), (pillars[0].x, pillars[0].height), 5)
+	#pygame.draw.line(screen, (255, 0, 0), (bird.x, bird.y), (pillars[0].x, pillars[0].y2), 5)
 	#pygame.draw.rect(screen, (255,0,0), (bird.x,bird.y,bird.w,bird.h),5)
 	text=font.render("Score: " + str(score), 1, (255, 255, 255))
 	screen.blit(text, (WIDTH-10-text.get_width(),10))
 	pygame.display.update()
 
-def main(genomes, config):
+def main():
 	interval = 500
-	nets = []
-	ge = []
-	birds = []
-	
-	for _, g in genomes:
-		net = neat.nn.FeedForwardNetwork.create(g, config)
-		nets.append(net)
-		birds.append(Bird(200, 300))
-		g.fitness = 0 
-		ge.append(g)
-  
-	pillars = [Pillar(WIDTH),Pillar(WIDTH+interval)]
+	bird = Bird(200, 300)
+	pillars = [Pillar(WIDTH+interval), Pillar(WIDTH+interval*2)]
 	bg = Background()
-	scrollspeed = 15
+	scrollspeed = 10
 	run = True
 	score = 0
-	clock=pygame.time.Clock()
-	lastscore = 0
+	wait = True
+	clock = pygame.time.Clock()
+	
+	while wait:
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				pygame.quit()
+				sys.exit()
+			if event.type == pygame.KEYDOWN:
+				wait=False
 	while run:
 		for event in pygame.event.get():
 			if event.type == pygame.QUIT:
 				run=False
-				pygame.quit()
-				quit()
-		lastscore = score
-
-		pillar_ind = 0
-		if len(birds) > 0:
-			if len(pillars) > 1 and birds[0].x > pillars[0].x + pillars[0].w:
-				pillar_ind = 1
-		else:
-			run = False
-			break
-
+		keys=pygame.key.get_pressed()
 		bg.move(scrollspeed)
-		for x, bird in enumerate(birds):
-			jump = False
-			ge[x].fitness += 0.1 
-			output = nets[x].activate((bird.y, abs(bird.y - pillars[pillar_ind].height), abs(bird.y-pillars[pillar_ind].y2)))
-			if output[0] > 0.5:
-				jump = True
-			bird.movement(jump)
-   
-			if bg.collide(bird) or bird.y<0:
-				ge[x].fitness -= 1
-				birds.pop(x)
-				nets.pop(x)
-				ge.pop(x)
-					
+		if bg.collide(bird):
+			scrollspeed = 0
+		else:
+			bird.movement(keys[pygame.K_SPACE])
 
 		for p in pillars:
 			p.x-=scrollspeed
 			if p.x<-100:
 				pillars.pop(pillars.index(p))
 				pillars.append(Pillar(pillars[-1].x+interval))
-			for x, bird in enumerate(birds):
-				if p.collide(bird):
-					birds.pop(x)
-					nets.pop(x)
-					ge.pop(x)
-				elif bird.x > p.x + p.w and not p.passed:
-					score += 1
-					ge[x].fitness += 5
-					p.passed = True
-					
-		draw(birds, pillars, score, bg)
-		clock.tick(120)
+			if bird.x > p.x + p.w and not p.passed:
+				score += 1
+				p.passed = True
+			if p.collide(bird):
+				bird.hit()	
+		draw(bird, pillars, score, bg)
 		
+		clock.tick(120)
 	
-
-def run(config_path):
-    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction, 
-                                neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                                config_path)
-    p = neat.Population(config)
-    
-    p.add_reporter(neat.StdOutReporter(True))
-    stats = neat.StatisticsReporter()
-    p.add_reporter(stats)
-    winner = p.run(main,50)
-    
-if __name__ == "__main__":
-    local_dir = os.path.dirname(__file__)
-    config_path = 'main/config.txt'
-    run(config_path)
+main()
